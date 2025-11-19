@@ -5,9 +5,8 @@ index.html
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>1v1 Trading Simulator</title>
 
-<!-- Chart.js + Financial Plugin (for candlesticks) -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial"></script>
+<!-- TradingView Lightweight Charts -->
+<script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
 
 <style>
 body {
@@ -40,8 +39,8 @@ button {
 button:hover {
   background: #006be6;
 }
-#chart-container {
-  width: 100%;
+#tv_chart {
+  width: 600px;
   height: 400px;
 }
 </style>
@@ -54,8 +53,8 @@ button:hover {
 
 <div class="container">
 
-  <div style="flex: 1;">
-    <canvas id="chart"></canvas>
+  <div>
+    <div id="tv_chart"></div>
   </div>
 
   <div style="width: 300px;">
@@ -85,11 +84,7 @@ button:hover {
 </div>
 
 <script>
-let price = 100;
-let candles = [];
-let timer = 60;
-let interval;
-
+// --- Player Data ---
 let players = {
   1: { balance: 10000, pos: 0 },
   2: { balance: 10000, pos: 0 }
@@ -102,7 +97,7 @@ function updateUI() {
   document.getElementById("p2pos").innerText = players[2].pos;
 }
 
-// --- BUY / SELL ---
+// --- Buy/Sell Functions ---
 function buy(p) {
   if (players[p].balance >= price) {
     players[p].balance -= price;
@@ -118,71 +113,85 @@ function sell(p) {
   }
 }
 
-// --- Generate random candlestick tick ---
+// --- Timer & Game ---
+let timer = 60;
+let interval;
+let price = 100;
+
+// --- TradingView Chart Setup ---
+const chart = LightweightCharts.createChart(document.getElementById('tv_chart'), {
+    width: 600,
+    height: 400,
+    layout: { backgroundColor: '#111', textColor: '#fff' },
+    grid: { vertLines: { color: '#333' }, horzLines: { color: '#333' } },
+    rightPriceScale: { borderColor: '#555' },
+    timeScale: { borderColor: '#555', timeVisible: true, secondsVisible: false }
+});
+
+const candleSeries = chart.addCandlestickSeries();
+
+let data = [
+    { time: Math.floor(Date.now()/1000) - 3, open: 100, high: 105, low: 95, close: 102 },
+    { time: Math.floor(Date.now()/1000) - 2, open: 102, high: 108, low: 101, close: 107 },
+    { time: Math.floor(Date.now()/1000) - 1, open: 107, high: 110, low: 105, close: 106 },
+];
+
+candleSeries.setData(data);
+
+// --- Simulate Market Tick ---
 function generateTick() {
-  let open = price;
-  let change = (Math.random() - 0.5) * 4;
-  price = Math.max(1, price + change);
-  let close = price;
-  let high = Math.max(open, close) + Math.random() * 1.5;
-  let low = Math.min(open, close) - Math.random() * 1.5;
-
-  candles.push({ o: open, h: high, l: low, c: close });
-
-  if (candles.length > 50) candles.shift();
-
-  chart.update();
+    const last = data[data.length - 1];
+    const change = (Math.random() - 0.5) * 4;
+    const newClose = Math.max(1, last.close + change);
+    const newData = {
+        time: Math.floor(Date.now()/1000),
+        open: last.close,
+        high: Math.max(last.close, newClose) + Math.random()*2,
+        low: Math.min(last.close, newClose) - Math.random()*2,
+        close: newClose
+    };
+    price = newClose;
+    data.push(newData);
+    if(data.length > 50) data.shift();
+    candleSeries.setData(data);
 }
 
-// --- Timer + Winner ---
+// --- Start / Reset Game ---
 function endGame() {
-  clearInterval(interval);
-  let p1 = players[1].balance + players[1].pos * price;
-  let p2 = players[2].balance + players[2].pos * price;
+    clearInterval(interval);
+    const p1Value = players[1].balance + players[1].pos * price;
+    const p2Value = players[2].balance + players[2].pos * price;
 
-  let msg = "";
-  if (p1 > p2) msg = "Player 1 Wins! 🎉";
-  else if (p2 > p1) msg = "Player 2 Wins! 🏆";
-  else msg = "It's a Tie!";
+    let msg = "";
+    if(p1Value > p2Value) msg = "Player 1 Wins! 🎉";
+    else if(p2Value > p1Value) msg = "Player 2 Wins! 🏆";
+    else msg = "It's a Tie!";
 
-  alert(msg + `\n\nFinal Values:\nP1: $${p1.toFixed(2)}\nP2: $${p2.toFixed(2)}`);
+    alert(msg + `\n\nFinal Values:\nP1: $${p1Value.toFixed(2)}\nP2: $${p2Value.toFixed(2)}`);
 }
 
 function startGame() {
-  timer = 60;
-  candles = [];
-  price = 100;
-
-  players = {
-    1: { balance: 10000, pos: 0 },
-    2: { balance: 10000, pos: 0 }
-  };
-  updateUI();
-
-  document.getElementById("time").innerText = timer;
-
-  clearInterval(interval);
-  interval = setInterval(() => {
-    generateTick();
-    timer--;
+    timer = 60;
+    price = 100;
+    players = {1: {balance:10000,pos:0}, 2:{balance:10000,pos:0}};
+    updateUI();
     document.getElementById("time").innerText = timer;
-    if (timer <= 0) endGame();
-  }, 1000);
-}
 
-// --- Chart ---
-const ctx = document.getElementById("chart");
-const chart = new Chart(ctx, {
-  type: 'candlestick',
-  data: { datasets: [{ label: "Market", data: candles }] },
-  options: {
-    responsive: true,
-    scales: {
-      x: { ticks: { color: "white" } },
-      y: { ticks: { color: "white" } }
-    }
-  }
-});
+    data = [
+        { time: Math.floor(Date.now()/1000) - 3, open: 100, high: 105, low: 95, close: 102 },
+        { time: Math.floor(Date.now()/1000) - 2, open: 102, high: 108, low: 101, close: 107 },
+        { time: Math.floor(Date.now()/1000) - 1, open: 107, high: 110, low: 105, close: 106 },
+    ];
+    candleSeries.setData(data);
+
+    clearInterval(interval);
+    interval = setInterval(() => {
+        generateTick();
+        timer--;
+        document.getElementById("time").innerText = timer;
+        if(timer <= 0) endGame();
+    }, 1000);
+}
 </script>
 
 </body>
